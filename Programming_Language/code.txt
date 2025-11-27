@@ -1,0 +1,7 @@
+let x = 2 + 3 * (4 - 1)
+let y = x ^ 2
+let z = y + 10 / 2
+let a
+output(z)
+a = input()
+output(a + 5)
