@@ -25,13 +25,13 @@ output(y)
 
 
 ### Степень
-let z = x ^ 2
+let z = x ^ 2  
 output(z)
 
 
 
 ### Ввод и вывод
-let a = input()
+let a = input()  
 output(a + 10)
 
 
