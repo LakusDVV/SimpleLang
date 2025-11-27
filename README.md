@@ -18,9 +18,9 @@
 ## Примеры
 
 ### Объявление и операции
-let x = 5
-let y = x + 3
-output(y)
+let x = 5   
+let y = x + 3  
+output(y)  
 
 
 
