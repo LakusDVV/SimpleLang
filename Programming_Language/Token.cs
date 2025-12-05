@@ -4,27 +4,40 @@ namespace SimpleLang
 {
     public enum TokenType
     {
-        Identifier,
+        
         Number,
-        KeywordLet,
-        KeywordInt,
-        KeywordInput,
-        KeywordOutput,
-
+        Identifier,
         Plus,
         Minus,
         Multiply,
         Divide,
         Power,
-
+        Remainder,
         Assign,
         LParen,
         RParen,
         Comma,
-
+        LBrace,
+        RBrace,
         EndOfLine,
-        EndOfFile
+
+        
+        KeywordLet,
+        KeywordInput,
+        KeywordOutput,
+        KeywordIf,
+        KeywordElse,
+        EndOfFile,
+
+        
+        Greater,
+        Less,
+        GreaterOrEqual,
+        LessOrEqual,
+        EqualEqual,
+        NotEqual
     }
+
 
     public class Token
     {

@@ -3,158 +3,168 @@
 
 using System;
 using System.Collections.Generic;
-using System.Xml.Linq;
+using System.Globalization;
 
 namespace SimpleLang
 {
     public class Interpreter
     {
-        private readonly KeyValueStorage<string, int> _vars =
-            new KeyValueStorage<string, int>();
+        private readonly KeyValueStorage<string, double> _vars =
+            new KeyValueStorage<string, double>();
 
-        public void ExecuteLine(string line)
+        public void ExecuteLines(List<string> lines)
         {
-            Lexer lexer = new Lexer(line);
-            List<Token> tokens = lexer.Tokenize();
-            if (tokens.Count == 0)
-                return;
-
-            
-
-            if (tokens[0].Type == TokenType.KeywordLet)
+            for (int i = 0; i < lines.Count; i++)
             {
-                ExecuteLetDeclaration(tokens);
-                return;
-            }
+                string line = lines[i].Trim();
+                if (string.IsNullOrEmpty(line))
+                    continue;
 
-            if (tokens[0].Type == TokenType.Identifier && LookForAssign(tokens))
-            {
-                ExecuteAssignment(tokens);
-                return;
-            }
+                List<string> blockLines = new List<string> { line };
 
-            if (tokens[0].Type == TokenType.KeywordOutput)
-            {
-                ExecuteOutput(tokens);
-                return;
-            }
+                // Проверка на if или любой блок
+                if (line.StartsWith("if") && line.EndsWith("{"))
+                {
+                    int openBraces = 1;
 
-            // Just an expression? Ignore.
+                    // Собираем все строки до закрывающей скобки
+                    while (openBraces > 0 && i + 1 < lines.Count)
+                    {
+                        i++;
+                        string nextLine = lines[i].Trim();
+                        if (nextLine.Contains("{")) openBraces++;
+                        if (nextLine.Contains("}")) openBraces--;
+
+                        blockLines.Add(nextLine);
+                    }
+                }
+
+                // Объединяем блок в одну строку для Lexer
+                string combined = string.Join(" ", blockLines);
+
+                try
+                {
+                    Lexer lexer = new Lexer(combined);
+                    List<Token> tokens = lexer.Tokenize();
+                    if (tokens.Count == 0) continue;
+
+                    Parser parser = new Parser(tokens);
+                    Node stmt = parser.ParseStatement(); // ParseStatement теперь умеет блоки
+                    Execute(stmt);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Demo error at '{line}': {ex.Message}");
+                }
+            }
         }
 
-        private bool LookForAssign(List<Token> tokens)
+
+        private void Execute(Node node)
         {
-            if (tokens.Count < 3)
-                return false;
-
-            return tokens[1].Type == TokenType.Assign;
-        }
-
-        private void ExecuteLetDeclaration(List<Token> tokens)
-        {
-            // let x = expr   OR   let x
-            string name = tokens[1].Text;
-
-            if (_vars.ContainsKey(name))
-                throw new Exception("Variable '" + name + "' already declared.");
-
-            if (tokens.Count > 3 && tokens[2].Type == TokenType.Assign)
+            switch (node)
             {
-                Parser parser = new Parser(tokens.GetRange(3, tokens.Count - 3));
-                Node expr = parser.ParseExpression();
+                case LetNode letNode:
+                    double letValue = letNode.Expr != null ? Evaluate(letNode.Expr) : 0;
+                    _vars.Add(letNode.Name, letValue);
+                    break;
 
-                int value = Evaluate(expr);
-                _vars.Add(name, value);
+                case AssignNode assignNode:
+                    double assignValue = Evaluate(assignNode.Expr);
+                    _vars.Update(assignNode.Name, assignValue);
+                    break;
+
+                case OutputNode outputNode:
+                    Console.WriteLine(Evaluate(outputNode.Expr));
+                    break;
+
+                case InputCallNode inputNode:
+                    Evaluate(inputNode); // просто возвращаем значение при вызове input()
+                    break;
+
+                case IfNode ifNode:
+                    if (EvaluateCondition(ifNode.Condition))
+                    {
+                        foreach (var stmt in ifNode.Body)
+                            Execute(stmt);
+                    }
+                    break;
+
+                case IfElseNode ifElseNode:
+                    if (EvaluateCondition(ifElseNode.Condition))
+                    {
+                        foreach (var stmt in ifElseNode.ThenBody)
+                            Execute(stmt);
+                    }
+                    else
+                    {
+                        foreach (var stmt in ifElseNode.ElseBody)
+                            Execute(stmt);
+                    }
+                    break;
+
+                default:
+                    // выражения без присваивания
+                    Evaluate(node);
+                    break;
+                    
+                
             }
-            else
-            {
-                _vars.Add(name, 0);
-            }
-        }        
-
-        private void ExecuteAssignment(List<Token> tokens)
-        {
-            // x = expr
-            string name = tokens[0].Text;
-
-            if (!_vars.ContainsKey(name))
-                throw new Exception("Variable '" + name + "' not declared.");
-
-            Parser parser = new Parser(tokens.GetRange(2, tokens.Count - 2));
-            Node expr = parser.ParseExpression();
-            int value = Evaluate(expr);
-
-            _vars.Update(name, value);
         }
 
-        private void ExecuteOutput(List<Token> tokens)
+
+
+        private bool EvaluateCondition(Node cond)
         {
-            // output(expr)
-            // 0: output
-            // 1: '('
-            // ...
-            int start = 2; // after "("
-            int end = tokens.Count - 2; // before ")"
-
-            List<Token> inner = tokens.GetRange(start, end - start + 1);
-            Parser parser = new Parser(inner);
-            Node expr = parser.ParseExpression();
-
-            int value = Evaluate(expr);
-            Console.WriteLine(value);
+            double result = Evaluate(cond);
+            return result != 0; // true если != 0
         }
 
-        private int Evaluate(Node node)
+        private double Evaluate(Node node)
         {
+            if (node is NumberNode n)
+                return n.Value;
+
+            if (node is IdentifierNode id)
+                return _vars.Get(id.Name);
+
             if (node is InputCallNode)
             {
                 Console.Write("input: ");
                 string raw = Console.ReadLine();
-
-                int value;
-                if (!int.TryParse(raw, out value))
-                    throw new Exception("Input must be an integer.");
-
-                return value;
+                double val;
+                if (!double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out val))
+                    throw new Exception("Input must be a number.");
+                return val;
             }
 
-
-            if (node is NumberNode)
+            if (node is BinaryNode b)
             {
-                return ((NumberNode)node).Value;
-            }
-
-            if (node is IdentifierNode)
-            {
-                string name = ((IdentifierNode)node).Name;
-                return _vars.Get(name);
-            }
-
-            if (node is BinaryNode)
-            {
-                BinaryNode b = (BinaryNode)node;
-                int left = Evaluate(b.Left);
-                int right = Evaluate(b.Right);
+                double left = Evaluate(b.Left);
+                double right = Evaluate(b.Right);
 
                 switch (b.Op)
                 {
                     case TokenType.Plus: return left + right;
                     case TokenType.Minus: return left - right;
                     case TokenType.Multiply: return left * right;
-                    case TokenType.Divide: return left / right;
-                    case TokenType.Power: return Pow(left, right);
+                    case TokenType.Divide:
+                        if (right == 0.0) throw new Exception("Division by zero");
+                        return left / right;
+                    case TokenType.Power: return Math.Pow(left, right);
+                    case TokenType.Remainder: return left % right;
+
+                    // логические операторы
+                    case TokenType.EqualEqual: return left == right ? 1.0 : 0.0;
+                    case TokenType.NotEqual: return left != right ? 1.0 : 0.0;
+                    case TokenType.Greater: return left > right ? 1.0 : 0.0;
+                    case TokenType.Less: return left < right ? 1.0 : 0.0;
+                    case TokenType.GreaterOrEqual: return left >= right ? 1.0 : 0.0;
+                    case TokenType.LessOrEqual: return left <= right ? 1.0 : 0.0;
                 }
             }
 
-            throw new Exception("Invalid expression node.");
-        }
-
-        private int Pow(int a, int b)
-        {
-            int r = 1;
-            for (int i = 0; i < b; i++)
-                r *= a;
-            return r;
+            throw new Exception("Invalid expression node: " + node.GetType());
         }
 
         public void PrintVariables()

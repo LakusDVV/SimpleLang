@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -21,11 +22,12 @@ namespace SimpleLang
 
             string filePath = null;
 
-            // Получаем путь к корневой папке проекта (где исполняемый файл)
+            // Получаем путь к корневой папке проекта
             string projectRoot = AppDomain.CurrentDomain.BaseDirectory;
 
             // Список файлов в корне проекта с расширением .txt
-            string[] rootFiles = Directory.GetFiles(projectRoot, "*.txt");
+            string[] rootFiles = Directory.GetFiles(projectRoot, "*.txt", SearchOption.AllDirectories);
+
 
             Console.WriteLine("Choose an option:");
             Console.WriteLine("1. Enter path to source file manually");
@@ -57,7 +59,6 @@ namespace SimpleLang
                 filePath = null;
             }
 
-
             Interpreter interpreter = new Interpreter();
 
             if (filePath == null)
@@ -66,29 +67,18 @@ namespace SimpleLang
                 Console.WriteLine("Running built-in demo program...\n");
                 string[] demo =
                 {
-                "let x = 2 + 3 * (4 - 1)",
-                "let y = x ^ 2",
-                "let z = y + 10 / 2",
-                "let a",
-                "output(z)",
-                "a = input()",
-                "output(a + 5)"
+                    "let x = 3.14",
+                    "if(x-1 >= 3){",
+                    "   x = x + 0.06",
+                    "}",                  
+                    "output(x)",
                 };
 
-
-                foreach(var line in demo){
-                    try
-                    {
-                        interpreter.ExecuteLine(line);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("Demo error: " + ex.Message);
-                    }
-                }
+                interpreter.ExecuteLines(new List<string>(demo));
 
                 Console.WriteLine("\nDemo finished. Variables:");
                 interpreter.PrintVariables();
+                Console.ReadKey();
                 return;
             }
 
@@ -101,29 +91,12 @@ namespace SimpleLang
             try
             {
                 // Читаем файл в UTF-8 и выполняем построчно
-                using (var reader = new StreamReader(filePath, Encoding.UTF8))
-                {
-                    string line;
-                    int lineNumber = 0;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        lineNumber++;
-                        if (string.IsNullOrWhiteSpace(line))
-                            continue;
-
-                        try
-                        {
-                            interpreter.ExecuteLine(line);
-                        }
-                        catch (Exception exLine)
-                        {
-                            Console.WriteLine(string.Format("Error at line {0}: {1}", lineNumber, exLine.Message));
-                        }
-                    }
-                }
+                var lines = File.ReadAllLines(filePath, Encoding.UTF8);
+                interpreter.ExecuteLines(new List<string>(lines));
 
                 Console.WriteLine("\nExecution finished. Variables:");
                 interpreter.PrintVariables();
+                Console.ReadKey();
             }
             catch (Exception ex)
             {
